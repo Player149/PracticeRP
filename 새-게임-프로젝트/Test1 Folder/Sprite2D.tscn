@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://dnscigshwmxfj"]
 
 [ext_resource type="Texture2D" uid="uid://cpvruses57bga" path="res://icon.svg" id="1_rsfbb"]
-[ext_resource type="Script" uid="uid://bmj778550kyk6" path="res://sprite_2d.gd" id="2_x5emp"]
+[ext_resource type="Script" uid="uid://bmj778550kyk6" path="res://Test1 Folder/sprite_2d.gd" id="2_x5emp"]
 
 [node name="Sprite2d" type="Sprite2D" unique_id=1195389771]
 position = Vector2(614, 331)
