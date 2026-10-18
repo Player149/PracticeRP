@@ -126,7 +126,7 @@ func _generate_ores() -> void:
 		deposits.append(ore)
 
 func _find_rock_surface(start: Vector3, direction: Vector3) -> Vector3:
-	var previous := terrain.base_density(start)
+	var previous: float = terrain.base_density(start)
 	for i in range(1, 58):
 		var p: Vector3 = start + direction * (float(i) * 0.28)
 		var next: float = terrain.base_density(p)
