@@ -1,0 +1,27 @@
+; Deep Vein - Godot 4 GDScript prototype
+config_version=5
+
+[application]
+config/name="Deep Vein | Mining Prototype"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+config/description="Procedural, deformable 3D caves with discoverable mineral veins."
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/handheld/orientation=0
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+textures/default_filters/use_nearest_mipmap_filter=false
+environment/defaults/default_clear_color=Color(0.035, 0.047, 0.065, 1)
+
+[physics]
+3d/default_gravity=21.0
+
+[input_devices]
+pointing/emulate_mouse_from_touch=true
+pointing/emulate_touch_from_mouse=false

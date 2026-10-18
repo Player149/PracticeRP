@@ -1,0 +1,13 @@
+# Godot-generated imports/cache/editor state
+.godot/
+*.translation
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+export/
+build/
+*.apk
+*.aab
+*.exe
+*.pck
