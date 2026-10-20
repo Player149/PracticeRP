@@ -97,4 +97,6 @@ func _rebuild() -> void:
     var mesh: ArrayMesh = ArrayMesh.new()
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
     ground_visual.mesh = mesh
-    ground_collision.shape = mesh.create_trimesh_shape()
+    var terrain_shape: ConcavePolygonShape3D = mesh.create_trimesh_shape()
+    terrain_shape.backface_collision = true
+    ground_collision.shape = terrain_shape
