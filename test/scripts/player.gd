@@ -29,8 +29,8 @@ var dig_count: int = 0
 func _ready() -> void:
     touch_enabled = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
     touch_ui.visible = touch_enabled
-    touch_ui.jump_requested.connect(_on_touch_jump)
-    touch_ui.dig_requested.connect(_dig)
+    touch_ui.connect("jump_requested", Callable(self, "_on_touch_jump"))
+    touch_ui.connect("dig_requested", Callable(self, "_dig"))
     if touch_enabled:
         instructions.text = "DIG - TERRAIN TEST   |   Left: move  |  Right: look"
         instructions.add_theme_font_size_override("font_size", 19)
