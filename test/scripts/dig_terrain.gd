@@ -72,23 +72,11 @@ func _rebuild() -> void:
     rebuild_pending = false
     var vertices: PackedVector3Array = PackedVector3Array()
     var normals: PackedVector3Array = PackedVector3Array()
-    var colors: PackedColorArray = PackedColorArray()
     var indices: PackedInt32Array = PackedInt32Array()
     for z in range(CELLS + 1):
         for x in range(CELLS + 1):
-            var point: Vector3 = _grid_pos(x, z)
-            var surface_normal: Vector3 = _grid_normal(x, z)
-            vertices.append(point)
-            normals.append(surface_normal)
-            # Visible soil strata: lower and steeper terrain is darker.
-            # This helps depth perception even if a mobile GPU weakens real-time shadows.
-            var depth_factor: float = clampf(-point.y / 2.6, 0.0, 1.0)
-            var slope_factor: float = 1.0 - clampf(surface_normal.y, 0.0, 1.0)
-            var top_soil: Color = Color(0.68, 0.53, 0.36, 1.0)
-            var exposed_soil: Color = Color(0.32, 0.24, 0.18, 1.0)
-            var dirt_color: Color = top_soil.lerp(exposed_soil, depth_factor * 0.78)
-            dirt_color = dirt_color.darkened(clampf(slope_factor * 0.28, 0.0, 0.22))
-            colors.append(dirt_color)
+            vertices.append(_grid_pos(x, z))
+            normals.append(_grid_normal(x, z))
     for z in range(CELLS):
         for x in range(CELLS):
             var a: int = _index(x, z)
@@ -105,7 +93,6 @@ func _rebuild() -> void:
     arrays.resize(Mesh.ARRAY_MAX)
     arrays[Mesh.ARRAY_VERTEX] = vertices
     arrays[Mesh.ARRAY_NORMAL] = normals
-    arrays[Mesh.ARRAY_COLOR] = colors
     arrays[Mesh.ARRAY_INDEX] = indices
     var mesh: ArrayMesh = ArrayMesh.new()
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)

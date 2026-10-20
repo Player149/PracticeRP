@@ -18,13 +18,12 @@ background_mode = 2
 sky = SubResource("Sky_day")
 ambient_light_source = 2
 ambient_light_color = Color(0.46, 0.55, 0.69, 1)
-ambient_light_energy = 0.32
+ambient_light_energy = 0.22
 tonemap_mode = 2
 tonemap_exposure = 1.0
 
 [sub_resource type="StandardMaterial3D" id="Material_ground"]
-albedo_color = Color(1, 1, 1, 1)
-vertex_color_use_as_albedo = true
+albedo_color = Color(0.55, 0.42, 0.30, 1)
 roughness = 1.0
 cull_mode = 2
 
@@ -67,9 +66,9 @@ light_color = Color(1, 0.91, 0.78, 1)
 light_energy = 2.1
 shadow_enabled = true
 directional_shadow_mode = 1
-directional_shadow_max_distance = 65.0
-shadow_bias = 0.04
-shadow_normal_bias = 1.1
+directional_shadow_max_distance = 38.0
+shadow_bias = 0.035
+shadow_normal_bias = 0.55
 
 [node name="Ground" type="StaticBody3D" parent="."]
 collision_layer = 1
