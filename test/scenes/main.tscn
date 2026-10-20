@@ -14,6 +14,7 @@ ambient_light_energy = 0.8
 [sub_resource type="StandardMaterial3D" id="Material_ground"]
 albedo_color = Color(0.45, 0.32, 0.23, 1)
 roughness = 1.0
+cull_mode = 2
 
 [sub_resource type="BoxMesh" id="BoxMesh_platform"]
 size = Vector3(4, 1.2, 4)
