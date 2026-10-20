@@ -1,7 +1,7 @@
 extends Control
-## Small mobile-only overlay. Gameplay touch tracking lives in player.gd.
+## Mobile overlay: move with left thumb, swipe on right to look, tap DIG or JUMP.
 signal jump_requested
-signal run_changed(is_running: bool)
+signal dig_requested
 
 var stick_center: Vector2 = Vector2.ZERO
 var stick_axis: Vector2 = Vector2.ZERO
@@ -9,11 +9,11 @@ var stick_active: bool = false
 
 func _ready() -> void:
     mouse_filter = Control.MOUSE_FILTER_IGNORE
-    _add_button("JUMP", -160.0, -140.0, 140.0, 110.0, true)
-    _add_button("RUN", -160.0, -245.0, 140.0, 85.0, false)
+    _add_button("JUMP", -160.0, -138.0, 140.0, 105.0, false)
+    _add_button("DIG", -160.0, -247.0, 140.0, 95.0, true)
     queue_redraw()
 
-func _add_button(caption: String, left: float, top: float, width: float, height: float, jump: bool) -> void:
+func _add_button(caption: String, left: float, top: float, width: float, height: float, is_dig: bool) -> void:
     var button: Button = Button.new()
     button.text = caption
     button.anchor_left = 1.0
@@ -28,20 +28,16 @@ func _add_button(caption: String, left: float, top: float, width: float, height:
     button.modulate = Color(0.83, 0.95, 1.0, 0.9)
     button.mouse_filter = Control.MOUSE_FILTER_STOP
     add_child(button)
-    if jump:
-        button.pressed.connect(_emit_jump)
+    if is_dig:
+        button.pressed.connect(_emit_dig)
     else:
-        button.button_down.connect(_start_run)
-        button.button_up.connect(_stop_run)
+        button.pressed.connect(_emit_jump)
+
+func _emit_dig() -> void:
+    dig_requested.emit()
 
 func _emit_jump() -> void:
     jump_requested.emit()
-
-func _start_run() -> void:
-    run_changed.emit(true)
-
-func _stop_run() -> void:
-    run_changed.emit(false)
 
 func set_stick(origin: Vector2, axis: Vector2, active: bool) -> void:
     stick_center = origin

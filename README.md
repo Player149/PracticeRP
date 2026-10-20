@@ -1,23 +1,19 @@
-# Dig — first-person movement (Godot 4)
+# Dig — first-person digging prototype (Godot 4)
 
-## Current state
-A playable **3D first-person movement sandbox** lives under `test/`. This is **not yet a digging game**: mining, ores and terrain deformation are deliberately excluded until movement works well on the target device.
+Project root: **test/project.godot** (not the repository root).
+Main scene: test/scenes/main.tscn.
 
-## Open in Godot
-1. Check out the `Dig` branch.
-2. In Godot 4, import **`test/project.godot`** (do not import the repository root).
-3. Run the project (F6 for open scene or F5 for project).
-
-The startup scene is `test/scenes/main.tscn`. It contains the camera, static ground with collision, platforms/pillars with collision and light, so it should render even before player code runs.
+## Included
+- FPS walk, free look, jump and collision.
+- Mobile left-stick, right-side camera swipe, JUMP and DIG buttons.
+- NO sprinting (removed).
+- Each DIG press lowers a round patch of ground: **0.7 units at the brush center**, tapered across a 1.9-unit radius. Repeating digs deepens the crater to a maximum depth of 8 units.
+- Both terrain mesh and collision are rebuilt after each dig.
+- The map is a lightweight height field; it does NOT support cave tunnels, ceilings, or overhangs yet. No voxels or ore systems yet.
 
 ## Controls
-PC: WASD / arrow keys — move; mouse — camera; Shift — run; Space — jump; R — reset; Esc — release/capture mouse; left-click — recapture mouse.
+Desktop: WASD/arrow keys, mouse to look, click or E to dig, Space to jump, R to respawn, Esc to release cursor.
+Mobile: left thumb to move, right half upper swipe to look, JUMP and DIG lower-right.
+Point at the ground and dig. If the camera is level, DIG targets soil about 2.6 m in front of the player.
 
-Mobile: drag on the left — move; drag on the upper-right — look; on-screen JUMP — jump; hold RUN — sprint. Supports separate fingers for moving and looking.
-
-## Technical notes
-- Godot 4, GL Compatibility renderer (chosen for broad Android support).
-- No add-ons, external assets, AI, multiplayer or voxel terrain required.
-- Code: `test/scripts/player.gd`, `test/scripts/touch_ui.gd`.
-- Scene: `test/scenes/main.tscn`.
-- For validation, test both editor run and on-device mobile touch controls.
+The Godot project runs in the Compatibility renderer for better Android coverage.
