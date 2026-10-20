@@ -83,12 +83,14 @@ func _rebuild() -> void:
             var b: int = _index(x, z + 1)
             var c: int = _index(x + 1, z)
             var d: int = _index(x + 1, z + 1)
+            # The visible, lit surface faces upward. Godot considers clockwise
+            # winding front-facing when viewed from above the X/Z plane.
             indices.append(a)
-            indices.append(b)
-            indices.append(c)
             indices.append(c)
             indices.append(b)
+            indices.append(c)
             indices.append(d)
+            indices.append(b)
     var arrays: Array = []
     arrays.resize(Mesh.ARRAY_MAX)
     arrays[Mesh.ARRAY_VERTEX] = vertices
