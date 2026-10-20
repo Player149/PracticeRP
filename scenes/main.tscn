@@ -1,29 +1,28 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://bq2jku3yvsj2d"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
+albedo_color = Color(0.35, 0.42, 0.48, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_ground"]
 size = Vector3(12, 0.2, 12)
 
 [sub_resource type="BoxMesh" id="BoxMesh_marker"]
-size = Vector3(1, 1, 1)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ground"]
-albedo_color = Color(0.35, 0.42, 0.48, 1)
+[node name="Dig" type="Node3D" unique_id=797969579]
 
-[node name="Dig" type="Node3D"]
-
-[node name="Camera3D" type="Camera3D" parent="."]
-position = Vector3(0, 4.5, 9)
-rotation = Vector3(-0.436332, 0, 0)
+[node name="Camera3D" type="Camera3D" parent="." unique_id=455189672]
+transform = Transform3D(1, 0, 0, 0, 0.90630794, 0.42261797, 0, -0.42261797, 0.90630794, 0, 4.5, 9)
 current = true
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
-rotation = Vector3(-0.785398, 0.523599, 0)
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1987383792]
+transform = Transform3D(0.86602527, -0.3535535, 0.35355362, 0, 0.7071069, 0.70710665, -0.50000024, -0.6123722, 0.61237246, 0, 0, 0)
 light_energy = 1.5
 
-[node name="Ground" type="MeshInstance3D" parent="."]
-mesh = SubResource("BoxMesh_ground")
+[node name="Ground" type="MeshInstance3D" parent="." unique_id=1713318598]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.8906468, 2.06531, -1.2604885)
 material_override = SubResource("StandardMaterial3D_ground")
+mesh = SubResource("BoxMesh_ground")
 
-[node name="MarkerCube" type="MeshInstance3D" parent="."]
-position = Vector3(0, 0.65, 0)
+[node name="MarkerCube" type="MeshInstance3D" parent="." unique_id=554992250]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
 mesh = SubResource("BoxMesh_marker")
