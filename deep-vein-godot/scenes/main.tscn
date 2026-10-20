@@ -1,6 +1,25 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[sub_resource type="PlaneMesh" id="Plane_fallback"]
+size = Vector2(32, 32)
 
-[node name="DeepVein" type="Node3D"]
+[node name="DigSandbox" type="Node3D"]
 script = ExtResource("1_main")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.766044, 0.642788, 0, -0.642788, 0.766044, 0, 27.9, 23.4)
+current = true
+fov = 60.0
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.93, -0.42, 0)
+light_energy = 1.6
+shadow_enabled = true
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="TerrainMesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("Plane_fallback")
+
+[node name="TerrainCollider" type="CollisionShape3D" parent="Ground"]
