@@ -16,6 +16,8 @@ const ATTACK_HALF_ANGLE: float = 0.8
 @onready var camera: Camera2D = $Player/Camera2D
 var defeated: int = 0
 var rng := RandomNumberGenerator.new()
+var shake_remaining: float = 0.0
+var shake_strength: float = 0.0
 
 func _ready() -> void:
 	rng.randomize()
@@ -36,6 +38,13 @@ func _ready() -> void:
 		human.global_position = Vector2(rng.randf_range(250.0, WORLD_WIDTH - 100.0), GROUND_Y)
 		human.defeated.connect(_on_human_defeated)
 	_update_hud()
+
+func _process(delta: float) -> void:
+	if shake_remaining > 0.0:
+		shake_remaining = maxf(0.0, shake_remaining - delta)
+		camera.offset = Vector2(rng.randf_range(-shake_strength, shake_strength), rng.randf_range(-shake_strength, shake_strength)) * minf(1.0, shake_remaining * 12.0)
+	else:
+		camera.offset = Vector2.ZERO
 
 func _set_player_speed(value: float) -> void:
 	player.speed = value
@@ -58,7 +67,9 @@ func _on_player_attack(damage: int, reach: float, direction: Vector2) -> void:
 			continue
 		if to_target.length_squared() > 0.01 and absf(direction.angle_to(to_target)) > ATTACK_HALF_ANGLE:
 			continue
-		human.take_damage(damage, direction.x * 220.0)
+		human.take_damage(damage, direction.x * 320.0)
+			shake_remaining = 0.11
+			shake_strength = 3.0
 
 func _update_hud() -> void:
 	hud.update_stats(defeated, maxi(0, dummy_count - defeated))
