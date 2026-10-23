@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="96" viewBox="0 0 64 96"><path d="M22 36Q7 42 14 65L3 92L25 78L29 66L36 95L53 95L45 62Q62 45 46 35Q55 21 43 9Q30 -3 18 12Q8 27 22 36Z" fill="#090912" stroke="#b73572" stroke-width="2"/><path d="M22 24l8 2m8-2l7-2" stroke="#ff6b99" stroke-width="4" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs><linearGradient id="skin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#26262b"/><stop offset=".45" stop-color="#08090d"/><stop offset="1" stop-color="#1c1420"/></linearGradient></defs>
+<!-- Short, stocky eyeless alien: only a permanent deranged toothy grin. -->
+<path d="M32 40C20 34 13 41 12 57L5 87Q4 96 13 98L25 81L26 105Q29 118 44 117L48 106L77 106L82 117Q99 119 103 103L105 82L116 98Q128 97 124 85L115 56Q110 39 97 41Q96 18 77 12Q61 4 42 13Q29 20 32 40Z" fill="url(#skin)" stroke="#050509" stroke-width="5" stroke-linejoin="round"/>
+<path d="M34 34Q64 19 94 34" fill="none" stroke="#45414a" stroke-width="3" opacity=".35"/>
+<path d="M24 67Q62 96 105 65Q98 101 65 103Q37 102 24 67Z" fill="#7e152c" stroke="#050509" stroke-width="4"/>
+<path d="M28 69L39 78L44 71L50 85L58 76L65 89L73 76L82 85L89 71L96 77L102 68Q72 83 28 69Z" fill="#f5e9df" stroke="#b3a5a2" stroke-width="1.5"/>
+<path d="M41 91Q64 105 88 89" stroke="#ef7d91" stroke-width="3" fill="none" stroke-linecap="round"/>
+</svg>
