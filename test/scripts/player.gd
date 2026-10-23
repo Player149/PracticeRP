@@ -8,7 +8,7 @@ const ACCELERATION: float = 20.0
 const MOUSE_SENSITIVITY: float = 0.0024
 const TOUCH_SENSITIVITY: float = 0.0030
 const STICK_RADIUS: float = 85.0
-const START_POSITION: Vector3 = Vector3(0.0, 0.1, 14.0)
+const START_POSITION: Vector3 = Vector3(0.0, 0.1, 6.0)
 const REACH: float = 6.0
 
 @onready var head: Node3D = $Head
@@ -25,6 +25,7 @@ var stick_start: Vector2 = Vector2.ZERO
 var stick_axis: Vector2 = Vector2.ZERO
 var jump_queued: bool = false
 var dig_count: int = 0
+var dig_queued: bool = false
 var preview_mesh: ImmediateMesh
 var preview_instance: MeshInstance3D
 var preview_timer: float = 0.0
@@ -35,7 +36,7 @@ func _ready() -> void:
     touch_enabled = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
     touch_ui.visible = touch_enabled
     touch_ui.connect("jump_requested", Callable(self, "_on_touch_jump"))
-    touch_ui.connect("dig_requested", Callable(self, "_dig"))
+    touch_ui.connect("dig_requested", Callable(self, "_request_dig"))
     if touch_enabled:
         instructions.text = "DIG - 3D VOXEL TEST   |   Left: move  |  Right: look"
         instructions.add_theme_font_size_override("font_size", 19)
@@ -54,7 +55,7 @@ func _input(event: InputEvent) -> void:
         var click: InputEventMouseButton = event as InputEventMouseButton
         if not touch_enabled and click.button_index == MOUSE_BUTTON_LEFT and click.pressed:
             if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-                _dig()
+                _request_dig()
             else:
                 Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
     elif event is InputEventKey:
@@ -68,7 +69,7 @@ func _input(event: InputEvent) -> void:
             elif key.keycode == KEY_R:
                 _reset_player()
             elif key.keycode == KEY_E:
-                _dig()
+                _request_dig()
     elif event is InputEventScreenTouch:
         if touch_enabled:
             _handle_touch(event as InputEventScreenTouch)
@@ -131,6 +132,13 @@ func _physics_process(delta: float) -> void:
     move_and_slide()
     if global_position.y < -9.0:
         _reset_player()
+    if dig_queued:
+        dig_queued = false
+        _dig()
+    _update_preview(delta)
+
+func _request_dig() -> void:
+    dig_queued = true
 
 func _dig() -> void:
     var hit: Dictionary = _raycast_terrain()
@@ -176,7 +184,7 @@ func _create_preview() -> void:
     preview_instance.visible = false
     get_parent().add_child(preview_instance)
 
-func _process(delta: float) -> void:
+func _update_preview(delta: float) -> void:
     preview_timer -= delta
     if preview_timer > 0.0:
         return
