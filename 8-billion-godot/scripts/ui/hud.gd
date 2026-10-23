@@ -1,8 +1,22 @@
 extends CanvasLayer
 
-@onready var label: Label = $MarginContainer/VBoxContainer/Stats
-@onready var health_bar: ProgressBar = $MarginContainer/VBoxContainer/Health
+signal speed_changed(value: float)
 
-func update_stats(health: int, souls: int, defeated: int, buildings: int, indoors: bool) -> void:
-	health_bar.value = health
-	label.text = "Defeated: %d   Souls: %d   Buildings: %d/12   %s" % [defeated, souls, buildings, "INTERIOR" if indoors else "CITY"]
+@onready var stats: Label = $MarginContainer/VBoxContainer/Stats
+@onready var slider: HSlider = $MarginContainer/VBoxContainer/SpeedSlider
+@onready var speed_label: Label = $MarginContainer/VBoxContainer/SpeedLabel
+
+func _ready() -> void:
+	slider.value_changed.connect(_on_speed_changed)
+	_on_speed_changed(slider.value)
+
+func set_speed(value: float) -> void:
+	slider.value = value
+	_on_speed_changed(value)
+
+func _on_speed_changed(value: float) -> void:
+	speed_label.text = "Movement speed: %d" % int(value)
+	speed_changed.emit(value)
+
+func update_stats(defeated: int, remaining: int) -> void:
+	stats.text = "Dummies defeated: %d   Remaining: %d" % [defeated, maxi(0, remaining)]
