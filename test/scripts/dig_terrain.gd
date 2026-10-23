@@ -1,6 +1,6 @@
 extends Node3D
-## Signed-density voxels with marching tetrahedra. Positive rock, negative air.
-## A spherical subtraction modifies only chunks touched by the DIG tool.
+## DigV2: persistent signed-density voxels, threaded triangle generation,
+## shared shader painting the mining ring on the actual surface.
 
 const CELLS: int = 10
 const VOXEL_SIZE: float = 0.8
@@ -22,20 +22,24 @@ const TETS = [
 ]
 
 var noise: FastNoiseLite = FastNoiseLite.new()
-var rock_material: StandardMaterial3D
+var rock_material: ShaderMaterial
 var chunks: Dictionary = {}
 var chunk_samples: Dictionary = {}
 var dirty_keys: Array[Vector3i] = []
 var queued_keys: Dictionary = {}
+var revisions: Dictionary = {}
+var worker: Thread
+var working_key: Vector3i = Vector3i.ZERO
+var working_revision: int = 0
 
 func _ready() -> void:
     noise.seed = 1974
     noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
     noise.frequency = 0.075
-    rock_material = StandardMaterial3D.new()
-    rock_material.albedo_color = Color(0.52, 0.40, 0.29)
-    rock_material.roughness = 0.96
-    rock_material.cull_mode = BaseMaterial3D.CULL_BACK
+    rock_material = ShaderMaterial.new()
+    rock_material.shader = load("res://shaders/voxel_rock.gdshader")
+    rock_material.set_shader_parameter("target_active", false)
+    rock_material.set_shader_parameter("dig_radius", DIG_RADIUS)
 
     # Top chunks first: spawn area is walkable before the lower chunks initialize.
     for y in range(CHUNK_COUNT.y - 1, -1, -1):
@@ -58,14 +62,50 @@ func _ready() -> void:
                 body.add_child(collision)
                 chunks[key] = {"body": body, "visual": visual, "collision": collision}
                 chunk_samples[key] = _create_samples(key)
-                _rebuild_chunk(key)
+                revisions[key] = 0
+                # Initial world load is synchronous, once. Only mining updates
+                # run on a worker thread (no scene-tree calls from that thread).
+                _apply_chunk(key, _generate_geometry(chunk_samples[key]) )
 
 func _process(_delta: float) -> void:
-    # Avoid rebuilding all affected chunks in a single mobile frame.
-    if not dirty_keys.is_empty():
-        var key: Vector3i = dirty_keys.pop_front()
-        queued_keys.erase(key)
-        _rebuild_chunk(key)
+    # Never block the main thread waiting for a running worker.
+    if worker != null:
+        if worker.is_alive():
+            return
+        var finished: Dictionary = worker.wait_to_finish()
+        worker = null
+        if int(revisions[working_key]) == working_revision:
+            _apply_chunk(working_key, finished)
+        elif not queued_keys.has(working_key):
+            queued_keys[working_key] = true
+            dirty_keys.append(working_key)
+
+    if worker == null and not dirty_keys.is_empty():
+        working_key = dirty_keys.pop_front()
+        queued_keys.erase(working_key)
+        working_revision = int(revisions[working_key])
+        # Duplicate the packed samples so edits cannot mutate worker input.
+        var snapshot: PackedFloat32Array = chunk_samples[working_key]
+        worker = Thread.new()
+        var err: Error = worker.start(Callable(self, "_generate_geometry").bind(snapshot.duplicate()))
+        if err != OK:
+            worker = null
+            _apply_chunk(working_key, _generate_geometry(snapshot))
+
+func _exit_tree() -> void:
+    if worker != null:
+        worker.wait_to_finish()
+        worker = null
+
+func set_target(surface_point: Vector3, normal: Vector3) -> void:
+    var direction: Vector3 = normal.normalized()
+    var center: Vector3 = surface_point - direction * DIG_INSET
+    rock_material.set_shader_parameter("dig_center_world", center)
+    rock_material.set_shader_parameter("target_active", true)
+
+func clear_target() -> void:
+    if rock_material != null:
+        rock_material.set_shader_parameter("target_active", false)
 
 func get_preview_radius() -> float:
     return sqrt(DIG_RADIUS * DIG_RADIUS - DIG_INSET * DIG_INSET)
@@ -149,6 +189,7 @@ func dig_at(surface_point: Vector3, surface_normal: Vector3) -> bool:
                 if not chunk_changed:
                     continue
                 chunk_samples[key] = samples
+                revisions[key] = int(revisions[key]) + 1
                 if not queued_keys.has(key):
                     queued_keys[key] = true
                     dirty_keys.append(key)
@@ -158,17 +199,11 @@ func dig_at(surface_point: Vector3, surface_normal: Vector3) -> bool:
 func _sample_index(x: int, y: int, z: int) -> int:
     return x + (CELLS + 1) * (y + (CELLS + 1) * z)
 
-func _rebuild_chunk(key: Vector3i) -> void:
-    if not chunks.has(key):
-        return
-    var chunk: Dictionary = chunks[key]
-    var visual: MeshInstance3D = chunk["visual"]
-    var collision: CollisionShape3D = chunk["collision"]
-    # The density field is persistent: no noise evaluation or old-dig replay.
-    var values: PackedFloat32Array = chunk_samples[key]
-
+func _generate_geometry(values: PackedFloat32Array) -> Dictionary:
+    # CPU-only work. Safe to run on a worker: no nodes, meshes, or PhysicsServer.
     var vertices: PackedVector3Array = PackedVector3Array()
     var normals: PackedVector3Array = PackedVector3Array()
+
     for z in range(CELLS):
         for y in range(CELLS):
             for x in range(CELLS):
@@ -187,9 +222,62 @@ func _rebuild_chunk(key: Vector3i) -> void:
                 for tet in TETS:
                     _emit_tetra(tet, ps, ds, vertices, normals)
 
+    # Smooth vertex normals from the density gradient rather than per-face
+    # normals, so small sphere cuts do not look like abrupt tetrahedral facets.
+    if not vertices.is_empty():
+        var gradients: PackedVector3Array = PackedVector3Array()
+        gradients.resize((CELLS + 1) * (CELLS + 1) * (CELLS + 1))
+        for z in range(CELLS + 1):
+            for y in range(CELLS + 1):
+                for x in range(CELLS + 1):
+                    var xp: int = mini(CELLS, x + 1)
+                    var xm: int = maxi(0, x - 1)
+                    var yp: int = mini(CELLS, y + 1)
+                    var ym: int = maxi(0, y - 1)
+                    var zp: int = mini(CELLS, z + 1)
+                    var zm: int = maxi(0, z - 1)
+                    var gradient: Vector3 = Vector3(
+                        values[_sample_index(xp,y,z)] - values[_sample_index(xm,y,z)],
+                        values[_sample_index(x,yp,z)] - values[_sample_index(x,ym,z)],
+                        values[_sample_index(x,y,zp)] - values[_sample_index(x,y,zm)]
+                    )
+                    gradients[_sample_index(x,y,z)] = -gradient.normalized()
+        for i in range(vertices.size()):
+            var smooth: Vector3 = _interpolated_normal(vertices[i] / VOXEL_SIZE, gradients)
+            if smooth.length_squared() > 0.01:
+                normals[i] = smooth.normalized()
+
+    return {"vertices": vertices, "normals": normals}
+
+func _interpolated_normal(p: Vector3, gradients: PackedVector3Array) -> Vector3:
+    var x: int = clampi(floori(p.x), 0, CELLS - 1)
+    var y: int = clampi(floori(p.y), 0, CELLS - 1)
+    var z: int = clampi(floori(p.z), 0, CELLS - 1)
+    var f: Vector3 = Vector3(clampf(p.x - x, 0.0, 1.0),
+        clampf(p.y - y, 0.0, 1.0), clampf(p.z - z, 0.0, 1.0))
+    var n000: Vector3 = gradients[_sample_index(x,y,z)]
+    var n100: Vector3 = gradients[_sample_index(x+1,y,z)]
+    var n010: Vector3 = gradients[_sample_index(x,y+1,z)]
+    var n110: Vector3 = gradients[_sample_index(x+1,y+1,z)]
+    var n001: Vector3 = gradients[_sample_index(x,y,z+1)]
+    var n101: Vector3 = gradients[_sample_index(x+1,y,z+1)]
+    var n011: Vector3 = gradients[_sample_index(x,y+1,z+1)]
+    var n111: Vector3 = gradients[_sample_index(x+1,y+1,z+1)]
+    var low: Vector3 = n000.lerp(n100, f.x).lerp(n010.lerp(n110, f.x), f.y)
+    var high: Vector3 = n001.lerp(n101, f.x).lerp(n011.lerp(n111, f.x), f.y)
+    return low.lerp(high, f.z)
+
+func _apply_chunk(key: Vector3i, result: Dictionary) -> void:
+    # Renderer and collision server are updated only from the main thread.
+    var chunk: Dictionary = chunks[key]
+    var visual: MeshInstance3D = chunk["visual"]
+    var collision: CollisionShape3D = chunk["collision"]
+    var vertices: PackedVector3Array = result["vertices"]
+    var normals: PackedVector3Array = result["normals"]
+
     if vertices.is_empty():
-        visual.mesh = null
         collision.shape = null
+        visual.mesh = null
         return
 
     var arrays: Array = []
@@ -198,15 +286,14 @@ func _rebuild_chunk(key: Vector3i) -> void:
     arrays[Mesh.ARRAY_NORMAL] = normals
     var mesh: ArrayMesh = ArrayMesh.new()
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-    visual.mesh = mesh
 
-    # Reuse generated triangle vertices directly for static physics; avoid
-    # extracting a second triangle soup back out of the rendered ArrayMesh.
-    # Full-precision collision is kept for narrow tunnels (no missing walls).
+    # Only a small chunk's triangle faces are sent to physics after the worker
+    # has finished. Collider still matches visuals for passable tunnels.
     var shape: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
     shape.set_faces(vertices)
     shape.backface_collision = true
     collision.shape = shape
+    visual.mesh = mesh
 
 func _emit_tetra(tet: Array, ps: Array[Vector3], ds: Array[float], vertices: PackedVector3Array, normals: PackedVector3Array) -> void:
     var air: Array[int] = []
