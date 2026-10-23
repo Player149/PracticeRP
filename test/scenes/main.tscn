@@ -69,7 +69,7 @@ shadow_normal_bias = 0.55
 script = ExtResource("3_ground")
 
 [node name="Platform" type="StaticBody3D" parent="."]
-position = Vector3(0, 0.6, -6)
+position = Vector3(0, 0.6, -4)
 collision_layer = 1
 
 [node name="Visual" type="MeshInstance3D" parent="Platform"]
@@ -81,7 +81,7 @@ material_override = SubResource("Material_platform")
 shape = SubResource("BoxShape3D_platform")
 
 [node name="PillarLeft" type="StaticBody3D" parent="."]
-position = Vector3(-9, 2.25, -12)
+position = Vector3(-7, 2.25, -6)
 collision_layer = 1
 
 [node name="Visual" type="MeshInstance3D" parent="PillarLeft"]
@@ -93,7 +93,7 @@ material_override = SubResource("Material_pillar")
 shape = SubResource("BoxShape3D_pillar")
 
 [node name="PillarRight" type="StaticBody3D" parent="."]
-position = Vector3(9, 2.25, -20)
+position = Vector3(7, 2.25, -7.5)
 collision_layer = 1
 
 [node name="Visual" type="MeshInstance3D" parent="PillarRight"]
@@ -105,7 +105,7 @@ material_override = SubResource("Material_pillar")
 shape = SubResource("BoxShape3D_pillar")
 
 [node name="LowWall" type="StaticBody3D" parent="."]
-position = Vector3(4, 0.5, -24)
+position = Vector3(4, 0.5, -10)
 collision_layer = 1
 
 [node name="Visual" type="MeshInstance3D" parent="LowWall"]
@@ -117,7 +117,7 @@ material_override = SubResource("Material_platform")
 shape = SubResource("BoxShape3D_long")
 
 [node name="Player" type="CharacterBody3D" parent="."]
-position = Vector3(0, 0.1, 14)
+position = Vector3(0, 0.1, 6.0)
 collision_layer = 2
 collision_mask = 1
 floor_snap_length = 0.3
