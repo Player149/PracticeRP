@@ -1,7 +1,7 @@
 extends CharacterBody2D
 class_name ShadowPlayer
 
-signal attacked(damage: int, reach: float, direction: float)
+signal attacked(damage: int, reach: float, direction: Vector2)
 
 @export_range(50.0, 1200.0, 10.0) var speed: float = 300.0
 @export var jump_velocity: float = -590.0
@@ -10,10 +10,7 @@ signal attacked(damage: int, reach: float, direction: float)
 @export_range(0.05, 1.0, 0.01) var attack_interval: float = 0.22
 var facing: float = 1.0
 var attack_cooldown: float = 0.0
-var slash: Node2D
-
-func _ready() -> void:
-	slash = get_node_or_null("AttackEffect")
+@onready var slash: Node2D = $AttackEffect
 
 func _physics_process(delta: float) -> void:
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
@@ -22,13 +19,14 @@ func _physics_process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_SPACE) and is_on_floor():
 		velocity.y = jump_velocity
 	var axis: float = float(int(Input.is_key_pressed(KEY_D)) - int(Input.is_key_pressed(KEY_A)))
-	if axis != 0.0:
-		facing = signf(axis)
-		$Sprite2D.flip_h = facing < 0.0
 	velocity.x = axis * speed
+	var aim: Vector2 = get_global_mouse_position() - (global_position + Vector2(0.0, -28.0))
+	if aim.length_squared() > 0.01:
+		facing = signf(aim.x) if absf(aim.x) > 0.01 else facing
+	$Sprite2D.flip_h = facing < 0.0
 	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and attack_cooldown <= 0.0:
 		attack_cooldown = attack_interval
-		attacked.emit(1, attack_reach, facing)
-		if slash != null:
-			slash.play(attack_reach, facing)
+		var direction: Vector2 = aim.normalized() if aim.length_squared() > 0.01 else Vector2(facing, 0.0)
+		attacked.emit(1, attack_reach, direction)
+		slash.play(attack_reach, direction)
 	move_and_slide()
