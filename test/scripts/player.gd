@@ -29,8 +29,8 @@ var dig_queued: bool = false
 var preview_mesh: ImmediateMesh
 var preview_instance: MeshInstance3D
 var preview_timer: float = 0.0
-const PREVIEW_SEGMENTS: int = 24
-const PREVIEW_INTERVAL: float = 0.085
+const PREVIEW_SEGMENTS: int = 32
+const PREVIEW_INTERVAL: float = 0.12
 
 func _ready() -> void:
     touch_enabled = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
@@ -45,6 +45,7 @@ func _ready() -> void:
         Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
     dig_status.text = "Aim at rock (6m) and press DIG"
     _create_preview()
+    head.rotation.x = -0.38  # Initial downward aim: rock is in range at spawn.
 
 func _input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
@@ -180,6 +181,8 @@ func _create_preview() -> void:
     material.albedo_color = Color(1.0, 0.86, 0.22)
     material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
     material.cull_mode = BaseMaterial3D.CULL_DISABLED
+    material.no_depth_test = true  # Outline remains visible on irregular voxel slopes.
+    material.render_priority = 10
     preview_instance.material_override = material
     preview_instance.visible = false
     get_parent().add_child(preview_instance)
@@ -195,21 +198,6 @@ func _update_preview(delta: float) -> void:
         return
     _draw_projected_outline(hit["position"], hit["normal"])
 
-func _project_to_terrain(point: Vector3, normal: Vector3) -> Vector3:
-    var start: Vector3 = point + normal * 1.8
-    var end: Vector3 = point - normal * 1.8
-    var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(start, end)
-    query.collision_mask = 1
-    query.exclude = [get_rid()]
-    var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
-    if not hit.is_empty():
-        var object: Object = hit["collider"]
-        if object is Node and (object as Node).is_in_group("diggable_terrain"):
-            var pos: Vector3 = hit["position"]
-            var surface_normal: Vector3 = hit["normal"]
-            return pos + surface_normal * 0.065
-    return point + normal * 0.065
-
 func _draw_projected_outline(point: Vector3, hit_normal: Vector3) -> void:
     var normal: Vector3 = hit_normal.normalized()
     var tangent: Vector3 = normal.cross(Vector3.UP)
@@ -223,7 +211,9 @@ func _draw_projected_outline(point: Vector3, hit_normal: Vector3) -> void:
     for i in range(PREVIEW_SEGMENTS):
         var angle: float = TAU * float(i) / float(PREVIEW_SEGMENTS)
         var point_on_circle: Vector3 = point + radius * (tangent * cos(angle) + bitangent * sin(angle))
-        points.append(_project_to_terrain(point_on_circle, normal))
+        # A camera-facing outline just above the tangent plane. No additional
+        # physics rays per marker vertex (previously 24 expensive queries).
+        points.append(point_on_circle + normal * 0.14)
 
     preview_mesh.clear_surfaces()
     preview_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -238,7 +228,7 @@ func _draw_projected_outline(point: Vector3, hit_normal: Vector3) -> void:
         var width_axis: Vector3 = segment.cross(view).normalized()
         if width_axis.length_squared() < 0.001:
             width_axis = normal
-        var width: Vector3 = width_axis * 0.03
+        var width: Vector3 = width_axis * 0.045
         preview_mesh.surface_add_vertex(p0 - width)
         preview_mesh.surface_add_vertex(p0 + width)
         preview_mesh.surface_add_vertex(p1 + width)
@@ -255,4 +245,4 @@ func _reset_player() -> void:
     global_position = START_POSITION
     velocity = Vector3.ZERO
     rotation = Vector3.ZERO
-    head.rotation = Vector3.ZERO
+    head.rotation = Vector3(-0.38, 0.0, 0.0)
