@@ -24,7 +24,7 @@ const TETS = [
 var noise: FastNoiseLite = FastNoiseLite.new()
 var rock_material: StandardMaterial3D
 var chunks: Dictionary = {}
-var chunk_digs: Dictionary = {}
+var chunk_samples: Dictionary = {}
 var dirty_keys: Array[Vector3i] = []
 var queued_keys: Dictionary = {}
 
@@ -57,6 +57,7 @@ func _ready() -> void:
                 var collision: CollisionShape3D = CollisionShape3D.new()
                 body.add_child(collision)
                 chunks[key] = {"body": body, "visual": visual, "collision": collision}
+                chunk_samples[key] = _create_samples(key)
                 _rebuild_chunk(key)
 
 func _process(_delta: float) -> void:
@@ -76,17 +77,25 @@ func _valid_chunk(key: Vector3i) -> bool:
     return key.x >= 0 and key.y >= 0 and key.z >= 0 \
         and key.x < CHUNK_COUNT.x and key.y < CHUNK_COUNT.y and key.z < CHUNK_COUNT.z
 
-func _density(p: Vector3, digs: Array) -> float:
+func _density(p: Vector3) -> float:
     # Finite block of rock; each side and bottom are also diggable surfaces.
     var top: float = 0.12 + noise.get_noise_2d(p.x, p.z) * 0.28
     var d: float = top - p.y
     d = minf(d, p.y + 11.55)
     d = minf(d, 11.72 - absf(p.x))
     d = minf(d, 11.72 - absf(p.z))
-    for sphere in digs:
-        var center: Vector3 = Vector3(sphere.x, sphere.y, sphere.z)
-        d = minf(d, p.distance_to(center) - sphere.w)
     return d
+
+func _create_samples(key: Vector3i) -> PackedFloat32Array:
+    var samples: PackedFloat32Array = PackedFloat32Array()
+    samples.resize((CELLS + 1) * (CELLS + 1) * (CELLS + 1))
+    var origin: Vector3 = _chunk_origin(key)
+    for z in range(CELLS + 1):
+        for y in range(CELLS + 1):
+            for x in range(CELLS + 1):
+                var p: Vector3 = origin + Vector3(x, y, z) * VOXEL_SIZE
+                samples[_sample_index(x, y, z)] = _density(p)
+    return samples
 
 func dig_at(surface_point: Vector3, surface_normal: Vector3) -> bool:
     var normal: Vector3 = surface_normal.normalized()
@@ -107,6 +116,8 @@ func dig_at(surface_point: Vector3, surface_normal: Vector3) -> bool:
         floori((high.y - ORIGIN.y) / CHUNK_WORLD_SIZE),
         floori((high.z - ORIGIN.z) / CHUNK_WORLD_SIZE)
     )
+    # Edit only nearby stored density samples. Unlike a list of historical
+    # spheres, work per dig remains almost constant even after many digs.
     var changed: bool = false
     for y in range(k0.y, k1.y + 1):
         for x in range(k0.x, k1.x + 1):
@@ -114,9 +125,30 @@ func dig_at(surface_point: Vector3, surface_normal: Vector3) -> bool:
                 var key: Vector3i = Vector3i(x, y, z)
                 if not _valid_chunk(key):
                     continue
-                var spheres: Array = chunk_digs.get(key, [])
-                spheres.append(sphere)
-                chunk_digs[key] = spheres
+                var origin: Vector3 = _chunk_origin(key)
+                var samples: PackedFloat32Array = chunk_samples[key]
+                var low_x: int = clampi(floori((low.x - origin.x) / VOXEL_SIZE), 0, CELLS)
+                var high_x: int = clampi(ceili((high.x - origin.x) / VOXEL_SIZE), 0, CELLS)
+                var low_y: int = clampi(floori((low.y - origin.y) / VOXEL_SIZE), 0, CELLS)
+                var high_y: int = clampi(ceili((high.y - origin.y) / VOXEL_SIZE), 0, CELLS)
+                var low_z: int = clampi(floori((low.z - origin.z) / VOXEL_SIZE), 0, CELLS)
+                var high_z: int = clampi(ceili((high.z - origin.z) / VOXEL_SIZE), 0, CELLS)
+                var chunk_changed: bool = false
+                for iz in range(low_z, high_z + 1):
+                    for iy in range(low_y, high_y + 1):
+                        for ix in range(low_x, high_x + 1):
+                            var p: Vector3 = origin + Vector3(ix, iy, iz) * VOXEL_SIZE
+                            var dist: float = p.distance_to(center)
+                            if dist >= DIG_RADIUS:
+                                continue
+                            var index: int = _sample_index(ix, iy, iz)
+                            var new_value: float = minf(samples[index], dist - DIG_RADIUS)
+                            if new_value < samples[index] - 0.00001:
+                                samples[index] = new_value
+                                chunk_changed = true
+                if not chunk_changed:
+                    continue
+                chunk_samples[key] = samples
                 if not queued_keys.has(key):
                     queued_keys[key] = true
                     dirty_keys.append(key)
@@ -132,21 +164,8 @@ func _rebuild_chunk(key: Vector3i) -> void:
     var chunk: Dictionary = chunks[key]
     var visual: MeshInstance3D = chunk["visual"]
     var collision: CollisionShape3D = chunk["collision"]
-    var digs: Array = chunk_digs.get(key, [])
-    var positions: PackedVector3Array = PackedVector3Array()
-    var values: PackedFloat32Array = PackedFloat32Array()
-    var count: int = (CELLS + 1) * (CELLS + 1) * (CELLS + 1)
-    positions.resize(count)
-    values.resize(count)
-    var origin: Vector3 = _chunk_origin(key)
-
-    for z in range(CELLS + 1):
-        for y in range(CELLS + 1):
-            for x in range(CELLS + 1):
-                var i: int = _sample_index(x, y, z)
-                var p: Vector3 = Vector3(x, y, z) * VOXEL_SIZE
-                positions[i] = p
-                values[i] = _density(origin + p, digs)
+    # The density field is persistent: no noise evaluation or old-dig replay.
+    var values: PackedFloat32Array = chunk_samples[key]
 
     var vertices: PackedVector3Array = PackedVector3Array()
     var normals: PackedVector3Array = PackedVector3Array()
@@ -158,7 +177,7 @@ func _rebuild_chunk(key: Vector3i) -> void:
                 var air_count: int = 0
                 for corner in CORNERS:
                     var i: int = _sample_index(x + corner.x, y + corner.y, z + corner.z)
-                    ps.append(positions[i])
+                    ps.append(Vector3(x + corner.x, y + corner.y, z + corner.z) * VOXEL_SIZE)
                     var v: float = values[i]
                     ds.append(v)
                     if v < 0.0:
