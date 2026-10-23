@@ -17,6 +17,7 @@ const REACH: float = 6.0
 @onready var touch_ui: Control = $"../CanvasLayer/TouchUI"
 @onready var instructions: Label = $"../CanvasLayer/Instructions"
 @onready var dig_status: Label = $"../CanvasLayer/DigStatus"
+@onready var reticle: Label = $"../CanvasLayer/Reticle"
 
 var touch_enabled: bool = false
 var move_finger: int = -1
@@ -195,7 +196,9 @@ func _update_preview(delta: float) -> void:
     var hit: Dictionary = _raycast_terrain()
     if hit.is_empty():
         preview_instance.visible = false
+        reticle.modulate = Color(1.0, 1.0, 1.0)
         return
+    reticle.modulate = Color(1.0, 0.85, 0.2)
     _draw_projected_outline(hit["position"], hit["normal"])
 
 func _draw_projected_outline(point: Vector3, hit_normal: Vector3) -> void:
