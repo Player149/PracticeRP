@@ -4,7 +4,7 @@ class_name EnemyProjectile
 var velocity: Vector2 = Vector2.ZERO
 var grenade: bool = false
 var remaining: float = 2.0
-var gravity: float = 920.0
+var grenade_gravity: float = 920.0
 var exploded: bool = false
 
 func configure(start: Vector2, target: Vector2, is_grenade: bool) -> void:
@@ -15,7 +15,7 @@ func configure(start: Vector2, target: Vector2, is_grenade: bool) -> void:
 func _physics_process(delta: float) -> void:
 	remaining -= delta
 	if grenade:
-		velocity.y += gravity * delta
+		velocity.y += grenade_gravity * delta
 	position += velocity * delta
 	if grenade and global_position.y >= 555.0:
 		explode()
