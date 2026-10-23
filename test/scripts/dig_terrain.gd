@@ -1,104 +1,247 @@
-extends StaticBody3D
-## Height-field digging prototype: each click removes a fixed depth of soil.
-## No cube blocks, cave ceilings, tunnels, or voxel overhangs yet.
+extends Node3D
+## Signed-density voxels with marching tetrahedra. Positive rock, negative air.
+## A spherical subtraction modifies only chunks touched by the DIG tool.
 
-const CELLS: int = 80
-const SPACING: float = 0.8
-const BRUSH_RADIUS: float = 1.9
-const DIG_DEPTH: float = 0.7
-const MAX_DEPTH: float = 8.0
+const CELLS: int = 10
+const VOXEL_SIZE: float = 0.8
+const CHUNK_WORLD_SIZE: float = 8.0
+const CHUNK_COUNT: Vector3i = Vector3i(3, 2, 3)
+const ORIGIN: Vector3 = Vector3(-12.0, -12.0, -12.0)
+const DIG_RADIUS: float = 1.45
+const DIG_INSET: float = 0.52
 
-@onready var ground_visual: MeshInstance3D = $GroundVisual
-@onready var ground_collision: CollisionShape3D = $GroundCollision
+const CORNERS = [
+    Vector3i(0, 0, 0), Vector3i(1, 0, 0),
+    Vector3i(1, 1, 0), Vector3i(0, 1, 0),
+    Vector3i(0, 0, 1), Vector3i(1, 0, 1),
+    Vector3i(1, 1, 1), Vector3i(0, 1, 1)
+]
+const TETS = [
+    [0, 5, 1, 6], [0, 1, 2, 6], [0, 2, 3, 6],
+    [0, 3, 7, 6], [0, 7, 4, 6], [0, 4, 5, 6]
+]
 
-var heights: PackedFloat32Array = PackedFloat32Array()
-var rebuild_pending: bool = false
+var noise: FastNoiseLite = FastNoiseLite.new()
+var rock_material: StandardMaterial3D
+var chunks: Dictionary = {}
+var chunk_digs: Dictionary = {}
+var dirty_keys: Array[Vector3i] = []
+var queued_keys: Dictionary = {}
 
 func _ready() -> void:
-    collision_layer = 1
-    heights.resize((CELLS + 1) * (CELLS + 1))
-    heights.fill(0.0)
-    _rebuild()
+    noise.seed = 1974
+    noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+    noise.frequency = 0.075
+    rock_material = StandardMaterial3D.new()
+    rock_material.albedo_color = Color(0.52, 0.40, 0.29)
+    rock_material.roughness = 0.96
+    rock_material.cull_mode = BaseMaterial3D.CULL_BACK
 
-func _index(x: int, z: int) -> int:
-    return z * (CELLS + 1) + x
+    # Top chunks first: spawn area is walkable before the lower chunks initialize.
+    for y in range(CHUNK_COUNT.y - 1, -1, -1):
+        for x in range(CHUNK_COUNT.x):
+            for z in range(CHUNK_COUNT.z):
+                var key: Vector3i = Vector3i(x, y, z)
+                var body: StaticBody3D = StaticBody3D.new()
+                body.name = "Stone_%d_%d_%d" % [x, y, z]
+                body.collision_layer = 1
+                body.collision_mask = 0
+                body.add_to_group("diggable_terrain")
+                body.position = _chunk_origin(key)
+                add_child(body)
 
-func _get_height(x: int, z: int) -> float:
-    var ix: int = clampi(x, 0, CELLS)
-    var iz: int = clampi(z, 0, CELLS)
-    return heights[_index(ix, iz)]
+                var visual: MeshInstance3D = MeshInstance3D.new()
+                visual.material_override = rock_material
+                visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+                body.add_child(visual)
+                var collision: CollisionShape3D = CollisionShape3D.new()
+                body.add_child(collision)
+                chunks[key] = {"body": body, "visual": visual, "collision": collision}
+                _rebuild_chunk(key)
 
-func _grid_pos(x: int, z: int) -> Vector3:
-    var wx: float = (float(x) - float(CELLS) * 0.5) * SPACING
-    var wz: float = (float(z) - float(CELLS) * 0.5) * SPACING
-    return Vector3(wx, _get_height(x, z), wz)
+func _process(_delta: float) -> void:
+    # Avoid rebuilding all affected chunks in a single mobile frame.
+    if not dirty_keys.is_empty():
+        var key: Vector3i = dirty_keys.pop_front()
+        queued_keys.erase(key)
+        _rebuild_chunk(key)
 
-func _grid_normal(x: int, z: int) -> Vector3:
-    return Vector3(
-        _get_height(x - 1, z) - _get_height(x + 1, z),
-        2.0 * SPACING,
-        _get_height(x, z - 1) - _get_height(x, z + 1)
-    ).normalized()
+func get_preview_radius() -> float:
+    return sqrt(DIG_RADIUS * DIG_RADIUS - DIG_INSET * DIG_INSET)
 
-func dig_at(world_point: Vector3) -> bool:
-    var local_point: Vector3 = to_local(world_point)
+func _chunk_origin(key: Vector3i) -> Vector3:
+    return ORIGIN + Vector3(key.x, key.y, key.z) * CHUNK_WORLD_SIZE
+
+func _valid_chunk(key: Vector3i) -> bool:
+    return key.x >= 0 and key.y >= 0 and key.z >= 0 \
+        and key.x < CHUNK_COUNT.x and key.y < CHUNK_COUNT.y and key.z < CHUNK_COUNT.z
+
+func _density(p: Vector3, digs: Array) -> float:
+    # Finite block of rock; each side and bottom are also diggable surfaces.
+    var top: float = 0.12 + noise.get_noise_2d(p.x, p.z) * 0.28
+    var d: float = top - p.y
+    d = minf(d, p.y + 11.55)
+    d = minf(d, 11.72 - absf(p.x))
+    d = minf(d, 11.72 - absf(p.z))
+    for sphere in digs:
+        var center: Vector3 = Vector3(sphere.x, sphere.y, sphere.z)
+        d = minf(d, p.distance_to(center) - sphere.w)
+    return d
+
+func dig_at(surface_point: Vector3, surface_normal: Vector3) -> bool:
+    var normal: Vector3 = surface_normal.normalized()
+    if normal.length_squared() < 0.5:
+        return false
+    var center: Vector3 = to_local(surface_point - normal * DIG_INSET)
+    var sphere: Vector4 = Vector4(center.x, center.y, center.z, DIG_RADIUS)
+    var bounds: Vector3 = Vector3.ONE * (DIG_RADIUS + VOXEL_SIZE)
+    var low: Vector3 = center - bounds
+    var high: Vector3 = center + bounds
+    var k0: Vector3i = Vector3i(
+        floori((low.x - ORIGIN.x) / CHUNK_WORLD_SIZE),
+        floori((low.y - ORIGIN.y) / CHUNK_WORLD_SIZE),
+        floori((low.z - ORIGIN.z) / CHUNK_WORLD_SIZE)
+    )
+    var k1: Vector3i = Vector3i(
+        floori((high.x - ORIGIN.x) / CHUNK_WORLD_SIZE),
+        floori((high.y - ORIGIN.y) / CHUNK_WORLD_SIZE),
+        floori((high.z - ORIGIN.z) / CHUNK_WORLD_SIZE)
+    )
     var changed: bool = false
-    var radius_squared: float = BRUSH_RADIUS * BRUSH_RADIUS
-    var min_x: int = clampi(floori((local_point.x - BRUSH_RADIUS) / SPACING + float(CELLS) * 0.5), 0, CELLS)
-    var max_x: int = clampi(ceili((local_point.x + BRUSH_RADIUS) / SPACING + float(CELLS) * 0.5), 0, CELLS)
-    var min_z: int = clampi(floori((local_point.z - BRUSH_RADIUS) / SPACING + float(CELLS) * 0.5), 0, CELLS)
-    var max_z: int = clampi(ceili((local_point.z + BRUSH_RADIUS) / SPACING + float(CELLS) * 0.5), 0, CELLS)
-    for z in range(min_z, max_z + 1):
-        for x in range(min_x, max_x + 1):
-            var p: Vector3 = _grid_pos(x, z)
-            var dx: float = p.x - local_point.x
-            var dz: float = p.z - local_point.z
-            var dist_squared: float = dx * dx + dz * dz
-            if dist_squared >= radius_squared:
-                continue
-            var falloff: float = 1.0 - sqrt(dist_squared) / BRUSH_RADIUS
-            var amount: float = DIG_DEPTH * falloff
-            var index: int = _index(x, z)
-            var new_height: float = maxf(-MAX_DEPTH, heights[index] - amount)
-            if new_height < heights[index] - 0.0001:
-                heights[index] = new_height
+    for y in range(k0.y, k1.y + 1):
+        for x in range(k0.x, k1.x + 1):
+            for z in range(k0.z, k1.z + 1):
+                var key: Vector3i = Vector3i(x, y, z)
+                if not _valid_chunk(key):
+                    continue
+                var spheres: Array = chunk_digs.get(key, [])
+                spheres.append(sphere)
+                chunk_digs[key] = spheres
+                if not queued_keys.has(key):
+                    queued_keys[key] = true
+                    dirty_keys.append(key)
                 changed = true
-    if changed and not rebuild_pending:
-        rebuild_pending = true
-        call_deferred("_rebuild")
     return changed
 
-func _rebuild() -> void:
-    rebuild_pending = false
+func _sample_index(x: int, y: int, z: int) -> int:
+    return x + (CELLS + 1) * (y + (CELLS + 1) * z)
+
+func _rebuild_chunk(key: Vector3i) -> void:
+    if not chunks.has(key):
+        return
+    var chunk: Dictionary = chunks[key]
+    var visual: MeshInstance3D = chunk["visual"]
+    var collision: CollisionShape3D = chunk["collision"]
+    var digs: Array = chunk_digs.get(key, [])
+    var positions: PackedVector3Array = PackedVector3Array()
+    var values: PackedFloat32Array = PackedFloat32Array()
+    var count: int = (CELLS + 1) * (CELLS + 1) * (CELLS + 1)
+    positions.resize(count)
+    values.resize(count)
+    var origin: Vector3 = _chunk_origin(key)
+
+    for z in range(CELLS + 1):
+        for y in range(CELLS + 1):
+            for x in range(CELLS + 1):
+                var i: int = _sample_index(x, y, z)
+                var p: Vector3 = Vector3(x, y, z) * VOXEL_SIZE
+                positions[i] = p
+                values[i] = _density(origin + p, digs)
+
     var vertices: PackedVector3Array = PackedVector3Array()
     var normals: PackedVector3Array = PackedVector3Array()
-    var indices: PackedInt32Array = PackedInt32Array()
-    for z in range(CELLS + 1):
-        for x in range(CELLS + 1):
-            vertices.append(_grid_pos(x, z))
-            normals.append(_grid_normal(x, z))
     for z in range(CELLS):
-        for x in range(CELLS):
-            var a: int = _index(x, z)
-            var b: int = _index(x, z + 1)
-            var c: int = _index(x + 1, z)
-            var d: int = _index(x + 1, z + 1)
-            # The visible, lit surface faces upward. Godot considers clockwise
-            # winding front-facing when viewed from above the X/Z plane.
-            indices.append(a)
-            indices.append(c)
-            indices.append(b)
-            indices.append(c)
-            indices.append(d)
-            indices.append(b)
+        for y in range(CELLS):
+            for x in range(CELLS):
+                var ps: Array[Vector3] = []
+                var ds: Array[float] = []
+                var air_count: int = 0
+                for corner in CORNERS:
+                    var i: int = _sample_index(x + corner.x, y + corner.y, z + corner.z)
+                    ps.append(positions[i])
+                    var v: float = values[i]
+                    ds.append(v)
+                    if v < 0.0:
+                        air_count += 1
+                if air_count == 0 or air_count == 8:
+                    continue
+                for tet in TETS:
+                    _emit_tetra(tet, ps, ds, vertices, normals)
+
+    if vertices.is_empty():
+        visual.mesh = null
+        collision.shape = null
+        return
+
     var arrays: Array = []
     arrays.resize(Mesh.ARRAY_MAX)
     arrays[Mesh.ARRAY_VERTEX] = vertices
     arrays[Mesh.ARRAY_NORMAL] = normals
-    arrays[Mesh.ARRAY_INDEX] = indices
     var mesh: ArrayMesh = ArrayMesh.new()
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-    ground_visual.mesh = mesh
-    var terrain_shape: ConcavePolygonShape3D = mesh.create_trimesh_shape()
-    terrain_shape.backface_collision = true
-    ground_collision.shape = terrain_shape
+    visual.mesh = mesh
+
+    var shape: ConcavePolygonShape3D = mesh.create_trimesh_shape()
+    shape.backface_collision = true
+    collision.shape = shape
+
+func _emit_tetra(tet: Array, ps: Array[Vector3], ds: Array[float], vertices: PackedVector3Array, normals: PackedVector3Array) -> void:
+    var air: Array[int] = []
+    var solid: Array[int] = []
+    for index in tet:
+        if ds[index] < 0.0:
+            air.append(index)
+        else:
+            solid.append(index)
+    if air.is_empty() or solid.is_empty():
+        return
+
+    var toward_air: Vector3 = Vector3.ZERO
+    for index in air:
+        toward_air += ps[index] / float(air.size())
+    for index in solid:
+        toward_air -= ps[index] / float(solid.size())
+
+    if air.size() == 1:
+        _emit_triangle(_edge(air[0], solid[0], ps, ds),
+            _edge(air[0], solid[1], ps, ds),
+            _edge(air[0], solid[2], ps, ds),
+            toward_air, vertices, normals)
+    elif solid.size() == 1:
+        _emit_triangle(_edge(solid[0], air[0], ps, ds),
+            _edge(solid[0], air[1], ps, ds),
+            _edge(solid[0], air[2], ps, ds),
+            toward_air, vertices, normals)
+    else:
+        var a: Vector3 = _edge(air[0], solid[0], ps, ds)
+        var b: Vector3 = _edge(air[0], solid[1], ps, ds)
+        var c: Vector3 = _edge(air[1], solid[0], ps, ds)
+        var d: Vector3 = _edge(air[1], solid[1], ps, ds)
+        _emit_triangle(a, b, c, toward_air, vertices, normals)
+        _emit_triangle(b, d, c, toward_air, vertices, normals)
+
+func _edge(i: int, j: int, ps: Array[Vector3], ds: Array[float]) -> Vector3:
+    var denominator: float = ds[i] - ds[j]
+    var ratio: float = 0.5
+    if absf(denominator) > 0.000001:
+        ratio = clampf(ds[i] / denominator, 0.0, 1.0)
+    return ps[i].lerp(ps[j], ratio)
+
+func _emit_triangle(a: Vector3, b: Vector3, c: Vector3, toward_air: Vector3,
+        vertices: PackedVector3Array, normals: PackedVector3Array) -> void:
+    var cross: Vector3 = (b - a).cross(c - a)
+    if cross.length_squared() < 0.00000001:
+        return
+    # Godot's front-face winding is clockwise; face the empty (air) side.
+    if cross.dot(toward_air) > 0.0:
+        var temp: Vector3 = b
+        b = c
+        c = temp
+        cross = -cross
+    var outward: Vector3 = (-cross).normalized()
+    vertices.append(a)
+    vertices.append(b)
+    vertices.append(c)
+    normals.append(outward)
+    normals.append(outward)
+    normals.append(outward)
