@@ -8,10 +8,10 @@ Open **test/project.godot**, not the repository root, then run F5.
 - **Genuine 3D signed-density voxel field:** rock is positive; empty space is negative.
 - Spherical mining removes part of the solid rock (not merely lowering a heightmap).
 - Chunked 3D terrain: 3 × 2 × 3 chunks; 10 × 10 × 10 cells/chunk; sample spacing 0.8 units.
-- Marching tetrahedra extract rocky triangle surfaces; triangle collisions are rebuilt with the edited surface.
-- The **yellow outlined ring** is projected onto the terrain in range and indicates the approximate visible excavation footprint. It disappears unless the crosshair points at mineable rock within **6 units**.
+- Marching tetrahedra extract rocky triangle surfaces; the static collision uses the same generated triangle vertices.
+- The **yellow outlined ring** shows the approximate excavation footprint when aiming at rock within **6 units**. The initial camera points down slightly to show the indicator immediately. The reticle also turns yellow while a valid target is acquired.
 - On DIG, a sphere of **radius 1.45 units**, recessed 0.52 units into the hit surface, is subtracted from the solid. Walls, floors, and the underside of rock can be excavated.
-- At most one changed chunk is rebuilt each frame to spread work across mobile frames.
+- Signed-density samples persist per chunk. DIG changes only nearby samples: there is **no growing history of spheres to recompute** on every mesh rebuild. At most one changed chunk is rebuilt per frame.
 - Sunlight casts real-time shadows; a low-intensity player flashlight lights new tunnels.
 
 ## Controls
@@ -26,7 +26,8 @@ Open **test/project.godot**, not the repository root, then run F5.
 - Triangles are flat-shaded and may look faceted at this cell resolution.
 - Digging near chunk borders can take a few frames to update the full surface and collision.
 - No saved world, inventory, ores, or multiplayer.
-- The yellow outline projects a ring onto the visible surface. On highly irregular walls, the precise volumetric cut can differ slightly from that approximation.
+- The yellow outline uses a tangent-plane approximation just above the surface, with depth testing disabled so it remains legible on mobile. It is not a precise decal and can hover over highly curved terrain; the actual mining still removes a 3D sphere.
+- Triangular collision is still detailed and built synchronously for each changed chunk, so some hitching can remain on mobile. This requires an on-device profiler test before choosing collision simplification / threaded meshing.
 - On-device Godot performance and runtime compatibility still need testing.
 
 ## Main files
