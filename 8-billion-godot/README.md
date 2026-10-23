@@ -1,29 +1,23 @@
-# 8 BILLION — Godot 4 modular prototype
+# 8 BILLION — Godot 4 dummy test
 
-Open **this folder** as a Godot 4.3+ project (import `project.godot`), then run `main.tscn` with F5.
+Open this folder's `project.godot` in Godot 4.3+.
 
-## Controls
-- A / D: move
-- W / Space: jump
-- J: attack
-- K: heavy attack
-- L: dash
-- E: enter / exit a building
-- R: restart
+## Current scope
+- Eyeless, squat, black alien monster with a wide permanent toothy grin (original SVG in `assets/characters/shadow.svg`).
+- A/D move, Space jump, left mouse click attack. No other gameplay bindings.
+- Only stationary human training dummies, randomly positioned in the level.
+- Buildings, interiors, soldiers, grenades, projectiles and other enemy behaviors are **not part of the active scene**.
+- Adjust movement speed while playing using the HUD slider (50–1200); set `starting_player_speed` and `dummy_count` on the Main node in the Inspector for defaults.
 
-## Architecture
-- `main.tscn`: world composition, ground collision, camera, HUD
-- `scripts/world/world.gd`: spawning, combat targeting, score and building transitions
-- `scenes/actors/player.tscn` + `scripts/actors/player.gd`: independent player controller
-- `scenes/actors/human.tscn` + `scripts/actors/human.gd`: configurable civilians, soldiers, grenadiers
-- `scenes/world/building.tscn` + `scripts/world/building.gd`: destructible buildings
-- `scenes/world/interior.tscn`: reusable interior backdrop and core art
-- `scenes/world/projectile.tscn` + `scripts/world/projectile.gd`: bullets and grenades
-- `scenes/ui/hud.tscn` + `scripts/ui/hud.gd`: HUD
-- `assets/`: original SVG character and environment placeholders; Godot imports them as textures.
+## Project layout
+`main.tscn` composes Player, Crowd, Ground and HUD.
+`scripts/actors/player.gd` owns player controls.
+`scripts/actors/human.gd` owns dummy damage.
+`scripts/world/world.gd` spawns dummies and resolves hits.
+`scripts/ui/hud.gd` owns speed slider and counters.
+Original editable SVG assets are in `assets/`.
 
-## Prototype limitations
-No external plugins. This is a refactored playable-design prototype, not a tested release. It has not been run through a Godot executable in this environment. The city uses one flat ground plane; interiors are simple separate zones; animations and advanced crowd behaviors remain future work. `main.gd` at project root is the archived earlier monolithic script and is not used by the current main scene. The older `8-billion/index.html` remains a separate web prototype.
+## Legacy files
+The earlier building/projectile scripts and scenes remain in the repository as **unused legacy assets**, but are not loaded by `main.tscn`. The old root `main.gd` is also unused.
 
-## Next steps
-Test with Godot 4.3+ and inspect the editor debugger, then refine collision, performance, interior combat and mobile controls.
+The Godot runtime was not available for automated execution testing. Verify in Godot editor and report any parser errors.
