@@ -1,38 +1,45 @@
-# Dig — 3D Density Voxel Mining (Godot 4)
+# DigV2 — 모바일 친화적인 복셀 굴착 재구현
 
-Open **test/project.godot**, not the repository root, then run F5.
+**Godot 프로젝트:** `test/project.godot`  
+**브랜치:** `DigV2`  
+기존 `Dig` 브랜치는 비교할 수 있도록 유지했습니다.
 
-## Playable prototype
+## 바뀐 구조
 
-- First-person movement, camera look, jump, collision, Android multi-touch controls.
-- **Genuine 3D signed-density voxel field:** rock is positive; empty space is negative.
-- Spherical mining removes part of the solid rock (not merely lowering a heightmap).
-- Chunked 3D terrain: 3 × 2 × 3 chunks; 10 × 10 × 10 cells/chunk; sample spacing 0.8 units.
-- Marching tetrahedra extract rocky triangle surfaces; the static collision uses the same generated triangle vertices.
-- The **yellow outlined ring** shows the approximate excavation footprint when aiming at rock within **6 units**. The initial camera points down slightly to show the indicator immediately. The reticle also turns yellow while a valid target is acquired.
-- On DIG, a sphere of **radius 1.45 units**, recessed 0.52 units into the hit surface, is subtracted from the solid. Walls, floors, and the underside of rock can be excavated.
-- Signed-density samples persist per chunk. DIG changes only nearby samples: there is **no growing history of spheres to recompute** on every mesh rebuild. At most one changed chunk is rebuilt per frame.
-- Sunlight casts real-time shadows; a low-intensity player flashlight lights new tunnels.
+- **진짜 3차원 밀도 복셀:** 바닥뿐 아니라 암석벽, 터널, 천장을 파낼 수 있습니다.
+- **노란 채굴 범위 표시:** 암석 표면에 직접 그려지는 `test/shaders/voxel_rock.gdshader`를 사용합니다. 별도의 원형 메시는 없습니다. 실제로 파낼 구형 공간과 표면의 교차 경계를 강조합니다.
+- **확실한 타깃 상태:** 암석을 조준하면 중앙 조준점이 노란색으로 바뀌고 상단에 `DIG READY`가 나타납니다. 대상이 없으면 `LOOK AT ROCK`이 나옵니다.
+- **백그라운드 삼각형 계산:** `Thread`에서 변경된 청크의 삼각형을 만들고, 완료된 결과만 메인 스레드에 반영합니다.
+- **중복 갱신 방지:** 청크 버전을 비교해 오래된 작업 결과를 폐기하고 최신 밀도만 재생성합니다.
+- **부드러운 법선:** 밀도 변화의 기울기에서 정점 법선을 계산해 이전의 삼각형 단위 각진 음영을 완화합니다.
+- **충돌 판정 정확도 유지:** 충돌체는 시각적인 지형 표면과 같은 삼각형을 사용합니다. 이 단계는 Godot 물리 서버에서 메인 스레드에 적용되어 잔여 끊김이 발생할 수 있습니다.
+- **모바일 입력 유지:** 왼쪽 이동 조이스틱, 오른쪽 카메라 드래그, 오른쪽 DIG/JUMP 버튼. 달리기 없음.
 
-## Controls
+## 작동 범위
 
-- PC: WASD/arrows move, mouse look, click or E dig, Space jump, R respawn, Esc release cursor.
-- Mobile: left-hand joystick, upper-right drag to turn, lower-right DIG and JUMP buttons.
-- Sprint is deliberately removed.
+시선에서 **6m 이내**의 암석을 조준하면 황금색 채굴 테두리가 보입니다. `DIG`를 누를 때마다 해당 위치에서 반경 **1.45m**의 구형 공간을 제거합니다. 카메라는 시작할 때 바닥을 약간 내려다보도록 했습니다.
 
-## Scope and current limitations
+현재 작은 테스트 월드는 18청크(3 × 2 × 3), 청크당 10³셀, 셀 간격 0.8m입니다. 광석·인벤토리·월드 저장·무한 맵은 포함하지 않습니다.
 
-- This is a small **bounded** proof of concept, not an infinite voxel world.
-- Triangles are flat-shaded and may look faceted at this cell resolution.
-- Digging near chunk borders can take a few frames to update the full surface and collision.
-- No saved world, inventory, ores, or multiplayer.
-- The yellow outline uses a tangent-plane approximation just above the surface, with depth testing disabled so it remains legible on mobile. It is not a precise decal and can hover over highly curved terrain; the actual mining still removes a 3D sphere.
-- Triangular collision is still detailed and built synchronously for each changed chunk, so some hitching can remain on mobile. This requires an on-device profiler test before choosing collision simplification / threaded meshing.
-- On-device Godot performance and runtime compatibility still need testing.
+## 실행
 
-## Main files
+1. GitHub에서 `DigV2` 브랜치를 받습니다.
+2. Godot 4에서 `test/project.godot`을 프로젝트로 엽니다.
+3. F5로 실행합니다. (모바일도 동일한 프로젝트를 사용합니다.)
+4. 암석을 바라봤을 때 `DIG READY`와 황금색 테두리가 동시에 나타나는지 확인합니다.
+5. DIG를 연속으로 여러 번 눌러 이동과 카메라 움직임이 끊기는지 확인합니다.
 
-- `test/scripts/dig_terrain.gd` — signed density, spherical subtraction, chunk meshes and collisions.
-- `test/scripts/player.gd` — raycast targeting, projected dig preview and first-person movement.
-- `test/scripts/touch_ui.gd` — mobile joystick, DIG and JUMP.
-- `test/scenes/main.tscn` — main world, lights, obstacles, player.
+## 의도적인 제한 및 검증 상태
+
+- 이 버전은 **외부 플러그인 없이 Godot 기본 기능**만으로 제작했습니다. Voxel Tools의 GDExtension 바이너리는 아직 포함하지 않았습니다. 모바일 편집기에 바로 넣어 볼 수 있도록 의존성을 늘리지 않았습니다.
+- 셰이더는 3D 공간에서 채굴구의 경계를 계산합니다. 화면에 표시되는 원은 경사에 따라 타원처럼 보일 수 있습니다.
+- 정확한 삼각형 충돌체 갱신은 아직 동기적으로 이루어집니다. 삼각형 생성만 비동기이므로 모든 프레임 드롭이 사라진다고 보장할 수는 없습니다.
+- Godot 4.7 Compatibility 렌더러를 사용하며, 실제 Android 기기에서 실행·성능 검증은 별도로 필요합니다.
+
+## 주요 파일
+
+- `test/scripts/dig_terrain.gd` — 밀도 데이터, 삼각형 생성 작업 스레드, 충돌체, 조준 셰이더
+- `test/shaders/voxel_rock.gdshader` — 지형 표면에 직접 채굴 경계 표시
+- `test/scripts/player.gd` — 플레이어, 채굴 광선, 타깃 상태
+- `test/scripts/touch_ui.gd` — 모바일 조작
+- `test/scenes/main.tscn` — 테스트 월드
