@@ -4,6 +4,7 @@ const HUMAN_SCENE: PackedScene = preload("res://scenes/actors/human.tscn")
 const DEATH_EFFECT: PackedScene = preload("res://scenes/effects/death_particles.tscn")
 const WORLD_WIDTH: float = 6000.0
 const GROUND_Y: float = 560.0
+const ATTACK_HALF_ANGLE: float = 0.8
 
 @export_range(1, 400, 1) var dummy_count: int = 100
 @export_range(50.0, 1200.0, 10.0) var starting_player_speed: float = 300.0
@@ -46,13 +47,18 @@ func _on_human_defeated(human: HumanActor) -> void:
 	defeated += 1
 	_update_hud()
 
-func _on_player_attack(damage: int, reach: float, direction: float) -> void:
-	var center_x: float = player.global_position.x + direction * reach * 0.5
+func _on_player_attack(damage: int, reach: float, direction: Vector2) -> void:
+	var origin: Vector2 = player.global_position + Vector2(0.0, -28.0)
 	for node in crowd.get_children():
 		var human: HumanActor = node as HumanActor
-		if human != null and not human.is_queued_for_deletion():
-			if absf(human.global_position.x - center_x) <= reach * 0.5 + 16.0 and absf(human.global_position.y - player.global_position.y) < 90.0:
-				human.take_damage(damage, direction * 220.0)
+		if human == null or human.is_queued_for_deletion():
+			continue
+		var to_target: Vector2 = human.global_position + Vector2(0.0, -30.0) - origin
+		if to_target.length() > reach + 15.0:
+			continue
+		if to_target.length_squared() > 0.01 and absf(direction.angle_to(to_target)) > ATTACK_HALF_ANGLE:
+			continue
+		human.take_damage(damage, direction.x * 220.0)
 
 func _update_hud() -> void:
 	hud.update_stats(defeated, maxi(0, dummy_count - defeated))
