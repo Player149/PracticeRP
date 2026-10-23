@@ -200,7 +200,11 @@ func _rebuild_chunk(key: Vector3i) -> void:
     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
     visual.mesh = mesh
 
-    var shape: ConcavePolygonShape3D = mesh.create_trimesh_shape()
+    # Reuse generated triangle vertices directly for static physics; avoid
+    # extracting a second triangle soup back out of the rendered ArrayMesh.
+    # Full-precision collision is kept for narrow tunnels (no missing walls).
+    var shape: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+    shape.set_faces(vertices)
     shape.backface_collision = true
     collision.shape = shape
 
