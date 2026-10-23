@@ -1,5 +1,5 @@
 extends CharacterBody3D
-## First person movement with a single, fixed-depth dig for each button press.
+## FPS controls with mining raycast and a projected surface outline.
 
 const MOVE_SPEED: float = 6.0
 const JUMP_SPEED: float = 6.5
@@ -13,7 +13,7 @@ const REACH: float = 6.0
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
-@onready var terrain: StaticBody3D = $"../Ground"
+@onready var terrain: Node3D = $"../Ground"
 @onready var touch_ui: Control = $"../CanvasLayer/TouchUI"
 @onready var instructions: Label = $"../CanvasLayer/Instructions"
 @onready var dig_status: Label = $"../CanvasLayer/DigStatus"
@@ -25,6 +25,11 @@ var stick_start: Vector2 = Vector2.ZERO
 var stick_axis: Vector2 = Vector2.ZERO
 var jump_queued: bool = false
 var dig_count: int = 0
+var preview_mesh: ImmediateMesh
+var preview_instance: MeshInstance3D
+var preview_timer: float = 0.0
+const PREVIEW_SEGMENTS: int = 24
+const PREVIEW_INTERVAL: float = 0.085
 
 func _ready() -> void:
     touch_enabled = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
@@ -32,12 +37,13 @@ func _ready() -> void:
     touch_ui.connect("jump_requested", Callable(self, "_on_touch_jump"))
     touch_ui.connect("dig_requested", Callable(self, "_dig"))
     if touch_enabled:
-        instructions.text = "DIG - TERRAIN TEST   |   Left: move  |  Right: look"
+        instructions.text = "DIG - 3D VOXEL TEST   |   Left: move  |  Right: look"
         instructions.add_theme_font_size_override("font_size", 19)
     else:
-        instructions.text = "DIG - TERRAIN TEST\nWASD: move  |  Mouse: look  |  Space: jump\nClick / E: dig  |  R: reset player  |  Esc: cursor"
+        instructions.text = "DIG - 3D VOXEL TEST\nWASD: move  |  Mouse: look  |  Space: jump\nClick / E: dig  |  R: reset player  |  Esc: cursor"
         Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-    dig_status.text = "DIG = -0.7m at center (each press)  |  Total: 0"
+    dig_status.text = "Aim at rock (6m) and press DIG"
+    _create_preview()
 
 func _input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
@@ -127,33 +133,112 @@ func _physics_process(delta: float) -> void:
         _reset_player()
 
 func _dig() -> void:
-    var ray_start: Vector3 = camera.global_position
-    var ray_end: Vector3 = ray_start - camera.global_transform.basis.z * REACH
-    var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(ray_start, ray_end)
+    var hit: Dictionary = _raycast_terrain()
+    if hit.is_empty():
+        dig_status.text = "No mineable surface under crosshair (range 6m)"
+        return
+    var success: bool = bool(terrain.call("dig_at", hit["position"], hit["normal"]))
+    if success:
+        dig_count += 1
+        dig_status.text = "Rock removed  |  Digs: %d" % dig_count
+        preview_instance.visible = false
+        preview_timer = 0.0
+    else:
+        dig_status.text = "This part of the world cannot be mined."
+
+func _raycast_terrain() -> Dictionary:
+    var start: Vector3 = camera.global_position
+    var end: Vector3 = start - camera.global_transform.basis.z * REACH
+    var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(start, end)
     query.collision_mask = 1
     query.exclude = [get_rid()]
     var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
-    var target: Vector3
-    if not hit.is_empty() and hit["collider"] == terrain:
-        target = hit["position"]
-    else:
-        # Fallback for a level camera: dig ground a short distance ahead.
-        var forward: Vector3 = -global_transform.basis.z
-        var spot: Vector3 = global_position + forward * 2.6
-        var top: Vector3 = spot + Vector3.UP * 4.0
-        var down_query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(top, top + Vector3.DOWN * 18.0)
-        down_query.collision_mask = 1
-        down_query.exclude = [get_rid()]
-        var down_hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(down_query)
-        if down_hit.is_empty() or down_hit["collider"] != terrain:
-            dig_status.text = "Move to open ground to dig."
-            return
-        target = down_hit["position"]
-    if bool(terrain.call("dig_at", target)):
-        dig_count += 1
-        dig_status.text = "DUG!   -0.7m center / press   |   Total digs: %d" % dig_count
-    else:
-        dig_status.text = "Soil is already at maximum depth."
+    if hit.is_empty():
+        return {}
+    var object: Object = hit["collider"]
+    if not (object is Node):
+        return {}
+    if not (object as Node).is_in_group("diggable_terrain"):
+        return {}
+    return hit
+
+func _create_preview() -> void:
+    preview_mesh = ImmediateMesh.new()
+    preview_instance = MeshInstance3D.new()
+    preview_instance.name = "MiningSurfaceOutline"
+    preview_instance.mesh = preview_mesh
+    preview_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+    var material: StandardMaterial3D = StandardMaterial3D.new()
+    material.albedo_color = Color(1.0, 0.86, 0.22)
+    material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+    material.cull_mode = BaseMaterial3D.CULL_DISABLED
+    preview_instance.material_override = material
+    preview_instance.visible = false
+    get_parent().add_child(preview_instance)
+
+func _process(delta: float) -> void:
+    preview_timer -= delta
+    if preview_timer > 0.0:
+        return
+    preview_timer = PREVIEW_INTERVAL
+    var hit: Dictionary = _raycast_terrain()
+    if hit.is_empty():
+        preview_instance.visible = false
+        return
+    _draw_projected_outline(hit["position"], hit["normal"])
+
+func _project_to_terrain(point: Vector3, normal: Vector3) -> Vector3:
+    var start: Vector3 = point + normal * 1.8
+    var end: Vector3 = point - normal * 1.8
+    var query: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(start, end)
+    query.collision_mask = 1
+    query.exclude = [get_rid()]
+    var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(query)
+    if not hit.is_empty():
+        var object: Object = hit["collider"]
+        if object is Node and (object as Node).is_in_group("diggable_terrain"):
+            var pos: Vector3 = hit["position"]
+            var surface_normal: Vector3 = hit["normal"]
+            return pos + surface_normal * 0.065
+    return point + normal * 0.065
+
+func _draw_projected_outline(point: Vector3, hit_normal: Vector3) -> void:
+    var normal: Vector3 = hit_normal.normalized()
+    var tangent: Vector3 = normal.cross(Vector3.UP)
+    if tangent.length_squared() < 0.01:
+        tangent = normal.cross(Vector3.RIGHT)
+    tangent = tangent.normalized()
+    var bitangent: Vector3 = normal.cross(tangent).normalized()
+    var radius: float = float(terrain.call("get_preview_radius"))
+
+    var points: Array[Vector3] = []
+    for i in range(PREVIEW_SEGMENTS):
+        var angle: float = TAU * float(i) / float(PREVIEW_SEGMENTS)
+        var point_on_circle: Vector3 = point + radius * (tangent * cos(angle) + bitangent * sin(angle))
+        points.append(_project_to_terrain(point_on_circle, normal))
+
+    preview_mesh.clear_surfaces()
+    preview_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+    for i in range(PREVIEW_SEGMENTS):
+        var p0: Vector3 = points[i]
+        var p1: Vector3 = points[(i + 1) % PREVIEW_SEGMENTS]
+        var segment: Vector3 = p1 - p0
+        if segment.length_squared() < 0.000001:
+            continue
+        # Tiny camera-facing ribbon is easier to see on mobile than 1px lines.
+        var view: Vector3 = camera.global_position - (p0 + p1) * 0.5
+        var width_axis: Vector3 = segment.cross(view).normalized()
+        if width_axis.length_squared() < 0.001:
+            width_axis = normal
+        var width: Vector3 = width_axis * 0.03
+        preview_mesh.surface_add_vertex(p0 - width)
+        preview_mesh.surface_add_vertex(p0 + width)
+        preview_mesh.surface_add_vertex(p1 + width)
+        preview_mesh.surface_add_vertex(p0 - width)
+        preview_mesh.surface_add_vertex(p1 + width)
+        preview_mesh.surface_add_vertex(p1 - width)
+    preview_mesh.surface_end()
+    preview_instance.visible = true
 
 func _on_touch_jump() -> void:
     jump_queued = true
