@@ -1,5 +1,5 @@
 extends CharacterBody3D
-## FPS controls with mining raycast and a projected surface outline.
+## FPS controller with voxel-mining shader preview, no dynamic outline geometry.
 
 const MOVE_SPEED: float = 6.0
 const JUMP_SPEED: float = 6.5
@@ -27,11 +27,8 @@ var stick_axis: Vector2 = Vector2.ZERO
 var jump_queued: bool = false
 var dig_count: int = 0
 var dig_queued: bool = false
-var preview_mesh: ImmediateMesh
-var preview_instance: MeshInstance3D
 var preview_timer: float = 0.0
-const PREVIEW_SEGMENTS: int = 32
-const PREVIEW_INTERVAL: float = 0.12
+const PREVIEW_INTERVAL: float = 0.075
 
 func _ready() -> void:
     touch_enabled = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
@@ -39,14 +36,13 @@ func _ready() -> void:
     touch_ui.connect("jump_requested", Callable(self, "_on_touch_jump"))
     touch_ui.connect("dig_requested", Callable(self, "_request_dig"))
     if touch_enabled:
-        instructions.text = "DIG - 3D VOXEL TEST   |   Left: move  |  Right: look"
+        instructions.text = "DIG V2 - 3D VOXEL   |   Left: move  |  Right: look"
         instructions.add_theme_font_size_override("font_size", 19)
     else:
-        instructions.text = "DIG - 3D VOXEL TEST\nWASD: move  |  Mouse: look  |  Space: jump\nClick / E: dig  |  R: reset player  |  Esc: cursor"
+        instructions.text = "DIG V2 - 3D VOXEL\nWASD: move  |  Mouse: look  |  Space: jump\nClick / E: dig  |  R: reset player  |  Esc: cursor"
         Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-    dig_status.text = "Aim at rock (6m) and press DIG"
-    _create_preview()
-    head.rotation.x = -0.38  # Initial downward aim: rock is in range at spawn.
+    dig_status.text = "Aim at rock: target status will appear here"
+    head.rotation.x = -0.42  # Start pointed toward the mineable ground.
 
 func _input(event: InputEvent) -> void:
     if event is InputEventMouseMotion:
@@ -151,7 +147,7 @@ func _dig() -> void:
     if success:
         dig_count += 1
         dig_status.text = "Rock removed  |  Digs: %d" % dig_count
-        preview_instance.visible = false
+        terrain.call("clear_target")
         preview_timer = 0.0
     else:
         dig_status.text = "This part of the world cannot be mined."
@@ -172,22 +168,6 @@ func _raycast_terrain() -> Dictionary:
         return {}
     return hit
 
-func _create_preview() -> void:
-    preview_mesh = ImmediateMesh.new()
-    preview_instance = MeshInstance3D.new()
-    preview_instance.name = "MiningSurfaceOutline"
-    preview_instance.mesh = preview_mesh
-    preview_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-    var material: StandardMaterial3D = StandardMaterial3D.new()
-    material.albedo_color = Color(1.0, 0.86, 0.22)
-    material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-    material.cull_mode = BaseMaterial3D.CULL_DISABLED
-    material.no_depth_test = true  # Outline remains visible on irregular voxel slopes.
-    material.render_priority = 10
-    preview_instance.material_override = material
-    preview_instance.visible = false
-    get_parent().add_child(preview_instance)
-
 func _update_preview(delta: float) -> void:
     preview_timer -= delta
     if preview_timer > 0.0:
@@ -195,51 +175,16 @@ func _update_preview(delta: float) -> void:
     preview_timer = PREVIEW_INTERVAL
     var hit: Dictionary = _raycast_terrain()
     if hit.is_empty():
-        preview_instance.visible = false
-        reticle.modulate = Color(1.0, 1.0, 1.0)
+        terrain.call("clear_target")
+        reticle.modulate = Color.WHITE
+        dig_status.text = "LOOK AT ROCK  |  6m range"
         return
-    reticle.modulate = Color(1.0, 0.85, 0.2)
-    _draw_projected_outline(hit["position"], hit["normal"])
-
-func _draw_projected_outline(point: Vector3, hit_normal: Vector3) -> void:
-    var normal: Vector3 = hit_normal.normalized()
-    var tangent: Vector3 = normal.cross(Vector3.UP)
-    if tangent.length_squared() < 0.01:
-        tangent = normal.cross(Vector3.RIGHT)
-    tangent = tangent.normalized()
-    var bitangent: Vector3 = normal.cross(tangent).normalized()
-    var radius: float = float(terrain.call("get_preview_radius"))
-
-    var points: Array[Vector3] = []
-    for i in range(PREVIEW_SEGMENTS):
-        var angle: float = TAU * float(i) / float(PREVIEW_SEGMENTS)
-        var point_on_circle: Vector3 = point + radius * (tangent * cos(angle) + bitangent * sin(angle))
-        # A camera-facing outline just above the tangent plane. No additional
-        # physics rays per marker vertex (previously 24 expensive queries).
-        points.append(point_on_circle + normal * 0.14)
-
-    preview_mesh.clear_surfaces()
-    preview_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-    for i in range(PREVIEW_SEGMENTS):
-        var p0: Vector3 = points[i]
-        var p1: Vector3 = points[(i + 1) % PREVIEW_SEGMENTS]
-        var segment: Vector3 = p1 - p0
-        if segment.length_squared() < 0.000001:
-            continue
-        # Tiny camera-facing ribbon is easier to see on mobile than 1px lines.
-        var view: Vector3 = camera.global_position - (p0 + p1) * 0.5
-        var width_axis: Vector3 = segment.cross(view).normalized()
-        if width_axis.length_squared() < 0.001:
-            width_axis = normal
-        var width: Vector3 = width_axis * 0.045
-        preview_mesh.surface_add_vertex(p0 - width)
-        preview_mesh.surface_add_vertex(p0 + width)
-        preview_mesh.surface_add_vertex(p1 + width)
-        preview_mesh.surface_add_vertex(p0 - width)
-        preview_mesh.surface_add_vertex(p1 + width)
-        preview_mesh.surface_add_vertex(p1 - width)
-    preview_mesh.surface_end()
-    preview_instance.visible = true
+    var world_point: Vector3 = hit["position"]
+    var normal: Vector3 = hit["normal"]
+    terrain.call("set_target", world_point, normal)
+    reticle.modulate = Color(1.0, 0.84, 0.12)
+    var distance: float = camera.global_position.distance_to(world_point)
+    dig_status.text = "DIG READY  |  %.1fm  |  Excavated: %d" % [distance, dig_count]
 
 func _on_touch_jump() -> void:
     jump_queued = true
@@ -248,4 +193,4 @@ func _reset_player() -> void:
     global_position = START_POSITION
     velocity = Vector3.ZERO
     rotation = Vector3.ZERO
-    head.rotation = Vector3(-0.38, 0.0, 0.0)
+    head.rotation = Vector3(-0.42, 0.0, 0.0)
