@@ -68,8 +68,8 @@ func _on_player_attack(damage: int, reach: float, direction: Vector2) -> void:
 		if to_target.length_squared() > 0.01 and absf(direction.angle_to(to_target)) > ATTACK_HALF_ANGLE:
 			continue
 		human.take_damage(damage, direction.x * 320.0)
-			shake_remaining = 0.11
-			shake_strength = 3.0
+		shake_remaining = 0.11
+		shake_strength = 3.0
 
 func _update_hud() -> void:
 	hud.update_stats(defeated, maxi(0, dummy_count - defeated))
