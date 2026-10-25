@@ -1,0 +1,18 @@
+# Godot 4 generated editor cache and imported resources
+.godot/
+.import/
+
+# Local editor and export configuration
+export.cfg
+export_credentials.cfg
+*.tmp
+*.translation
+
+# C# / Mono generated files
+.mono/
+data_*/
+mono_crash.*.json
+
+# OS-specific files
+.DS_Store
+Thumbs.db
