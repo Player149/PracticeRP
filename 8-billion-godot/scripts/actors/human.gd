@@ -3,10 +3,10 @@ class_name HumanActor
 
 signal defeated(actor: HumanActor)
 
-@export var max_health: int = 1
+@export_range(1, 20, 1) var max_health: int = 2
 @export var gravity_force: float = 1450.0
 @export var knockback_decay: float = 700.0
-var health: int = 1
+var health: int = 2
 var hit_flash: float = 0.0
 var base_color: Color = Color.WHITE
 
