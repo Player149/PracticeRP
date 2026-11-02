@@ -26,47 +26,19 @@ var invulnerability: float = 0.0
 var camera: Camera3D
 var weapon: Node3D
 
+@onready var camera_pivot: Node3D = $CameraPivot
+
 func _ready() -> void:
-    var collider := CollisionShape3D.new()
-    var shape := CapsuleShape3D.new()
-    shape.radius = 0.35
-    shape.height = 1.8
-    collider.shape = shape
-    collider.position.y = 0.9
-    add_child(collider)
-    camera = Camera3D.new()
-    camera.position.y = 1.58
-    camera.current = true
-    camera.fov = 86.0
-    add_child(camera)
-    _build_axe()
+    camera = $CameraPivot/Camera3D
+    weapon = $CameraPivot/Camera3D/AxeViewmodel
     Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
     stats_changed.emit(hp, kills, dash_charges)
-
-func _make_box(parent: Node3D, size: Vector3, pos: Vector3, color: Color) -> void:
-    var mesh_node := MeshInstance3D.new()
-    var mesh := BoxMesh.new()
-    mesh.size = size
-    mesh_node.mesh = mesh
-    mesh_node.position = pos
-    var mat := StandardMaterial3D.new()
-    mat.albedo_color = color
-    mesh_node.material_override = mat
-    parent.add_child(mesh_node)
-
-func _build_axe() -> void:
-    weapon = Node3D.new()
-    weapon.position = Vector3(0.52, -0.45, -0.8)
-    camera.add_child(weapon)
-    _make_box(weapon, Vector3(0.10, 0.82, 0.12), Vector3(0.0, 0.03, 0.0), Color(0.55, 0.28, 0.12))
-    _make_box(weapon, Vector3(0.42, 0.20, 0.14), Vector3(-0.13, 0.47, 0.0), Color(0.70, 0.74, 0.78))
-    _make_box(weapon, Vector3(0.18, 0.20, 0.21), Vector3(0.04, -0.28, 0.0), Color(0.38, 0.38, 0.40))
 
 func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
         rotate_y(-event.relative.x * MOUSE_SENS)
-        camera.rotate_x(-event.relative.y * MOUSE_SENS)
-        camera.rotation.x = clampf(camera.rotation.x, -1.4, 1.4)
+        camera_pivot.rotate_x(-event.relative.y * MOUSE_SENS)
+        camera_pivot.rotation.x = clampf(camera_pivot.rotation.x, -1.4, 1.4)
     if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
         if event.pressed:
             charging = true
