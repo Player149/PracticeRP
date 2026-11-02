@@ -9,7 +9,7 @@ Branch: `axe-exorcist-prototype`. Import `AxeExorcist/project.godot` using Godot
 - `scenes/ghost.tscn` — ghost collider, model and AnimationPlayer.
 - `scripts/*.gd` — behavior and combat logic only. Exported values are editable in the inspector.
 
-The graybox arena walls and cover are still generated in `scripts/arena.gd` and should be replaced with hand-authored level geometry next. The HUD and other gameplay nodes are editable in the scene tree. No externally generated asset required.
+All 49 graybox arena blocks (floor, boundary and cover), their collision shapes, the HUD, and other gameplay nodes are editable in the scene tree. Scene instances organize the player, weapon and ghost, while scripts handle their runtime behaviors. No externally generated asset required.
 
 ## Controls
 WASD move, mouse look, Space jump, Shift dash, F kick, left mouse click/release to slash, hold 0.32s+ to heavy attack, Esc release mouse.
