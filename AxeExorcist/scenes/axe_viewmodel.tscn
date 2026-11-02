@@ -1,0 +1,38 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="BoxMesh" id="HandleMesh"]
+size = Vector3(0.10, 0.82, 0.12)
+
+[sub_resource type="StandardMaterial3D" id="Wood"]
+albedo_color = Color(0.55, 0.28, 0.12, 1)
+
+[sub_resource type="BoxMesh" id="BladeMesh"]
+size = Vector3(0.42, 0.20, 0.14)
+
+[sub_resource type="StandardMaterial3D" id="Steel"]
+albedo_color = Color(0.7, 0.74, 0.78, 1)
+
+[sub_resource type="BoxMesh" id="GripMesh"]
+size = Vector3(0.18, 0.20, 0.21)
+
+[sub_resource type="StandardMaterial3D" id="Grip"]
+albedo_color = Color(0.38, 0.38, 0.40, 1)
+
+[node name="AxeViewmodel" type="Node3D"]
+
+[node name="Handle" type="MeshInstance3D" parent="."]
+mesh = SubResource("HandleMesh")
+material_override = SubResource("Wood")
+position = Vector3(0, 0.03, 0)
+
+[node name="Blade" type="MeshInstance3D" parent="."]
+mesh = SubResource("BladeMesh")
+material_override = SubResource("Steel")
+position = Vector3(-0.13, 0.47, 0)
+
+[node name="Grip" type="MeshInstance3D" parent="."]
+mesh = SubResource("GripMesh")
+material_override = SubResource("Grip")
+position = Vector3(0.04, -0.28, 0)
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
